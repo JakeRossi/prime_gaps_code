@@ -1,9 +1,8 @@
 # Prime Gaps Under Modular Constraints — data pipeline
 
-Code that generates every table and figure referenced in
-`prime_gaps_paper_draft.tex`. All of it has been smoke-tested end to end
-at small N (10^5–10^6) in this environment; running at your real target
-N (10^8–10^9) has NOT been tested here since large-N runs are slow.
+Code that generates every table and figure in `prime_gaps_paper_draft.tex`.
+Tested end to end at N up to 10^9 (not just small N) — see "Tested status"
+below.
 
 ## Setup
 
@@ -11,80 +10,101 @@ N (10^8–10^9) has NOT been tested here since large-N runs are slow.
 pip install -r requirements.txt
 ```
 
-`primesieve` and `pyarrow` are optional but strongly recommended once you
-move past N ~ 10^7 (see comments in `gen_primes.py`). The code
-auto-detects both and falls back gracefully if they aren't installed.
+`primesieve` and `pyarrow` are optional. In practice, the pure-Python
+segmented sieve in `gen_primes.py` is fast enough on its own (N=10^9 in
+under 10 seconds, thanks to NumPy vectorization) — `primesieve` is not
+required even at N=10^9, and it's common for its install to fail on
+Windows due to missing C build tools. Don't spend time fighting that
+install; the code falls back automatically and works fine without it.
+`pyarrow` (for Parquet output) is only relevant if you pass
+`--keep-raw-data` to `master_sweep.py`, or for `run_all.py`'s largest runs.
 
 ## Files
 
-| File | Paper section it feeds | What it does |
-|---|---|---|
-| `gen_primes.py` | Methodology | Modules 1–4: segmented sieve, gap/residue table, save to CSV/Parquet |
-| `stats_tests.py` | Sections 4.1, 4.2, 4.4 | Modules 6–7: equidistribution check, omnibus chi-square + Cramér's V, pairwise KS with BH correction, residue-pair vs. LOS/uniform prediction, dominant gaps |
-| `cramer_model.py` | Background, Section 4.5 | Module 8: residue-restricted Cramér model simulation |
-| `plots.py` | Figures throughout | Module 5: every figure in the paper |
-| `run_all.py` | — | Orchestrates everything above into one command |
+| File | What it does |
+|---|---|
+| `gen_primes.py` | Segmented sieve, builds the prime-gap/residue table, saves to CSV/Parquet |
+| `stats_tests.py` | Equidistribution check, omnibus chi-square + Cramér's V, pairwise KS with BH correction, naive-uniform and Hardy–Littlewood residue-pair predictions, dominant gaps |
+| `cramer_model.py` | Residue-restricted Cramér-model simulation (random baseline) |
+| `plots.py` | All figures, including multi-modulus combined comparison plots |
+| `run_all.py` | Full analysis for one primary N (all tables/figures for that N), plus an optional effect-size-vs-N sweep on the side |
+| `master_sweep.py` | Runs the full analysis across a *range* of N (default 10^5–10^9) and consolidates every metric into one table (`master_trend.csv`) with both N and modulus as columns — the tool actually used to generate the paper's Section 4.3–4.6 results |
+| `convergence_analysis.py` | Post-hoc analysis of sweep data: fits log-linear vs. Tao-style decay curves, tracks the Hardy–Littlewood bump ratio across N |
+| `dataset_profiler.py` | General-purpose tool (not paper-specific): point it at a folder of CSVs and it flags outliers, trend reversals, and correlations automatically |
 
-## Quick start (sanity check first!)
+## Tested status
 
-Run small before you run big — this takes seconds and confirms
-everything works on your machine:
+Every script has been run successfully end to end at N up to 10^9,
+including the full `master_sweep.py` sweep (10^5 through 10^9, both
+moduli) — this is what actually produced the numbers in the paper's
+Results section. No `primesieve` install was needed for any of it.
+
+## Quick start — sanity check first
 
 ```bash
 python run_all.py --N 1000000 --moduli 6 30 --sweep 100000 300000 1000000
 ```
 
-This produces `data/`, `tables/`, and `figures/` directories with
-everything the paper needs, just at toy scale. Open a couple of the
-PNGs in `figures/` to eyeball that they look sane before committing to
-a long run.
+Takes seconds, confirms everything works on your machine before a longer run.
 
-## Real run
+## Getting the full paper results
+
+This is what actually generated the numbers currently in the paper:
 
 ```bash
-python run_all.py --N 1000000000 --moduli 6 30 \
-    --sweep 1000000 10000000 100000000 1000000000
+python master_sweep.py --moduli 6 30 --min-exponent 5 --max-exponent 9
 ```
 
-This is the run whose output tables/figures you actually cite in the
-paper. With `primesieve` installed, generating primes up to 10^9 should
-take a few minutes; without it, budget more (the pure-Python sieve is
-correct but slower — consider testing at 10^8 first if you're on a
-deadline and haven't installed primesieve).
+Produces `tables/master_trend.csv` (every metric, every N, both moduli),
+`tables/decay_verdicts.csv`, and four `figures/*_combined.png` files.
+Raw per-N data is **not** saved by default (add `--keep-raw-data` if you
+want it) — those files aren't needed downstream and can be large
+(hundreds of MB per file at N=10^9), which is also why they're excluded
+via `.gitignore` rather than committed to the repo.
 
-**Important:** `--sweep` reruns prime generation from scratch at every
-N in the list (that's what Section 4.3 needs — one Cramér's V per N).
-Including 10^9 in the sweep means generating it AGAIN in addition to
-the main `--N` run. If you're tight on time, you can drop the largest
-sweep value and just note in the paper that N=10^9 sweep point is your
-`--N` run's own value (they're numerically identical, no need to
-literally rerun it — feel free to hand-merge that data point into
-`tables/effect_size_vs_N_mod{q}.csv` instead of waiting for a duplicate run).
+For a deep dive on one specific N (all 64 pair cells, all 28 pairwise KS
+tests, every figure for that one N), use `run_all.py` instead:
+
+```bash
+python run_all.py --N 1000000000 --moduli 6 30
+```
+
+Then, optionally, run the decay-curve/bump-ratio diagnostics on top of
+either sweep's output:
+
+```bash
+python convergence_analysis.py --moduli 6 30 --sweep 1000000 10000000 100000000
+```
 
 ## Where each output goes in the paper
 
-See the top-of-file docstring in `run_all.py` for the exact mapping of
-output filename → paper section. In short:
-
 - `tables/equidistribution_mod{q}.csv` → Section 4.1
 - `tables/omnibus_test_mod{q}.csv`, `tables/pairwise_ks_mod{q}.csv`,
-  `tables/pair_predictions_mod{q}.csv`,
-  `figures/gap_histograms_mod{q}.png`,
+  `tables/pair_predictions_mod{q}.csv`, `figures/gap_histograms_mod{q}.png`,
   `figures/residue_pair_heatmap_mod{q}.png` → Section 4.2
-- `tables/effect_size_vs_N_mod{q}.csv`,
-  `figures/effect_size_vs_N_mod{q}.png` → Section 4.3 (tests the paper's
-  working conjecture directly)
-- `tables/dominant_gaps_mod{q}.csv`,
-  `figures/dominant_gaps_mod{q}.png` → Section 4.4
+- `tables/pair_predictions_mod{q}.csv` (naive vs. Hardy–Littlewood
+  goodness-of-fit) → Section 4.3
+- `tables/master_trend.csv`, `tables/decay_verdicts.csv`,
+  `figures/effect_size_vs_N_combined.png` → Section 4.4 (bias persistence,
+  the paper's main N-dependence result)
+- `tables/dominant_gaps_mod{q}.csv`, `figures/dominant_gaps_mod{q}.png` → Section 4.5
 - `tables/cramer_model_comparison_mod{q}.csv`,
-  `figures/real_vs_cramer_mod{q}.png` → Section 4.5
+  `tables/excess_bias_vs_cramer_mod{q}.csv`, `tables/top_biased_pairs_mod{q}.csv`,
+  `figures/real_vs_cramer_mod{q}.png`,
+  `figures/excess_bias_v_vs_N_combined.png`,
+  `figures/bump_ratio_vs_N_combined.png` → Section 4.6
 
-## Known simplification to flag in your Methodology section
+## Known limitation, as flagged in the paper
 
-`stats_tests.los_style_prediction()` is a **simplified stand-in**, not
-the exact Hardy–Littlewood singular-series formula from Lemke Oliver &
-Soundararajan (2016). It's flagged clearly in its docstring. If you have
-time on Day 4–5, revisiting their equations (7)–(9) to implement the
-exact constants would meaningfully strengthen the paper; if not,
-reporting it as an explicit, acknowledged simplification is honest and
-fine for a first pass.
+`stats_tests.los_style_prediction()` implements the *real* Hardy–Littlewood
+singular-series formula (`hardy_littlewood_gap_weight`), not a made-up
+heuristic — but only its **leading-order term**. That term alone predicts
+same-residue-class pairs should be *more* common (the real, separate
+"sexy primes outnumber twin primes" effect), which is the opposite sign
+from the actual Lemke Oliver–Soundararajan bias. The true LOS effect comes
+from a smaller secondary correction term (see Tao's derivation, cited in
+the paper) that isn't implemented here — reproducing it was out of scope
+for this project's timeframe. This is stated explicitly in the paper's
+Limitations section; it's also exactly why the leading-order prediction
+fits *worse* than naive-uniform at mod 6 but *better* at mod 30 (Section 4.3)
+— a real, discussed finding, not a bug.
