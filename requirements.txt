@@ -1,0 +1,14 @@
+numpy
+pandas
+scipy
+sympy
+matplotlib
+
+# Strongly recommended for N >= 10^8 (10-50x faster prime generation).
+# The code auto-detects and uses it if installed; falls back to a
+# pure-Python segmented sieve otherwise.
+primesieve
+
+# Optional: only needed if you want Parquet output instead of CSV for
+# large N (recommended once N >= 10^8, per the Methodology section).
+pyarrow

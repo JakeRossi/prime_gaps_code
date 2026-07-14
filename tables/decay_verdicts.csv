@@ -1,0 +1,3 @@
+modulus,r2_linear_logN,r2_tao_loglogN_over_logN,verdict
+6,0.9968769139696025,0.9953598571157344,The two models fit comparably well (R^2 within 0.02 of each other) -- your N range may not yet be wide enough to distinguish between these two decay shapes.
+30,0.9721298770870063,0.9968233698369179,Data favors the Tao-style loglog(N)/log(N) decay shape over simple linear-in-log(N) decay -- consistent with the functional form of the LOS secondary bias term.
